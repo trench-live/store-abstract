@@ -58,6 +58,7 @@ fun main() {
 fun Application.module(
     env: AppEnvironment = AppEnvironment.fromEnv(),
     orderCacheOverride: OrderCache? = null,
+    closeResourcesOnStop: Boolean = orderCacheOverride == null,
 ) {
     val json = Json {
         prettyPrint = false
@@ -137,9 +138,11 @@ fun Application.module(
         miscRoutes()
     }
 
-    environment.monitor.subscribe(ApplicationStopped) {
-        runCatching { orderCache.close() }
-        runCatching { DatabaseFactory.close() }
+    if (closeResourcesOnStop) {
+        environment.monitor.subscribe(ApplicationStopped) {
+            runCatching { orderCache.close() }
+            runCatching { DatabaseFactory.close() }
+        }
     }
 }
 
