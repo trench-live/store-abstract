@@ -1,0 +1,15 @@
+.git
+.github
+.idea
+.gradle
+.gradle-user
+build
+out
+.env
+frontend/node_modules
+frontend/dist
+frontend/.env
+.gradle-ci-tmp
+.gradle-verify
+.gradle-verify2
+
