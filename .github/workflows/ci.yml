@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -41,3 +41,24 @@ jobs:
           path: |
             build/reports/tests/test
             build/test-results/test
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-store-abstract-production
+      cancel-in-progress: true
+
+    steps:
+      - name: Deploy to Ubuntu server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/azirumga/store-abstract
+            git pull origin master
+            docker compose up -d --build
+            docker image prune -f
