@@ -1,137 +1,92 @@
-﻿# Store Abstract (Kotlin + Ktor)
+# Store Abstract (Kotlin + Ktor)
 
-Production-ready интернет-магазин: backend на Kotlin/Ktor + PostgreSQL/Redis/RabbitMQ, отдельный worker, React frontend, Docker Compose и SSH автодеплой через GitHub Actions.
+Production-ready интернет-магазин:
+- backend на Kotlin/Ktor
+- PostgreSQL + Exposed + Flyway
+- Redis cache
+- RabbitMQ + worker
+- Docker Compose
+- CI/CD через GitHub Actions + SSH deploy
 
 ## Stack
 
-- Kotlin + Ktor 2.x
+- Kotlin 1.9.x
+- Ktor 2.x
 - Gradle Kotlin DSL
-- PostgreSQL + Exposed ORM + Flyway
-- Redis (cache)
-- RabbitMQ (order events + outbox relay)
+- PostgreSQL
+- Exposed ORM
+- Flyway migrations
+- Redis
+- RabbitMQ
 - JWT auth
 - Swagger/OpenAPI
 - Tests: unit, integration (Testcontainers), e2e
-- Docker + Docker Compose
-- GitHub Actions (appleboy/ssh-action)
+- React frontend
 
-## Структура
+## Project Structure
 
 ```text
-/src
-  /domain
-  /repository
-  /service
-  /routes
-  /dto
-  /config
-/frontend
+src/
+  main/kotlin/com/storeabstract/
+    domain/
+    repository/
+    service/
+    routes/
+    dto/
+    config/
+  main/resources/
+    db/migration/
+    openapi.yaml
+  test/kotlin/com/storeabstract/
+frontend/
+.github/workflows/
 ```
 
-## Local development
+## Environment Variables
 
-1. Скопируйте env:
+Используются только переменные окружения (`.env`):
+
+- `PORT=18080`
+- `DB_HOST`
+- `DB_PORT`
+- `DB_NAME`
+- `DB_USER`
+- `DB_PASSWORD`
+- `JWT_SECRET`
+- `REDIS_HOST`
+- `REDIS_PORT`
+- `RABBITMQ_HOST`
+- `RABBITMQ_PORT`
+- `RABBITMQ_USER`
+- `RABBITMQ_PASSWORD`
+- `FRONTEND_API_URL`
+- `ADMIN_EMAIL` (optional)
+- `ADMIN_PASSWORD` (optional)
+
+## Local Development
 
 ```bash
 cp .env.example .env
-```
-
-2. Сборка:
-
-```bash
 ./gradlew build
-```
-
-3. Поднять весь стек:
-
-```bash
 docker compose up --build
 ```
 
-## Как открыть
+## Access
 
 - Frontend: `http://localhost:18081`
-- Swagger UI: `http://localhost:18080/swagger`
+- Swagger: `http://localhost:18080/swagger`
 - Health: `http://localhost:18080/health`
 
-## Admin bootstrap
+## Docker Compose Services
 
-Админ создаётся/обновляется автоматически при старте API, если заданы:
+- `api` (порт `18080:18080`)
+- `worker`
+- `frontend` (порт `18081:80`)
+- `postgres`
+- `redis`
+- `rabbitmq`
 
-- `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
-
-В `.env.example` уже есть стартовые значения:
-
-- `admin@example.com`
-- `admin12345`
-
-## Деплой на сервер (Ubuntu 20.04)
-
-1. Клонируйте репозиторий в:
-
-```bash
-/home/azirumga/store-abstract
-```
-
-2. Создайте `.env` (по примеру `.env.example`).
-
-3. Запустите:
-
-```bash
-cd /home/azirumga/store-abstract
-docker compose up -d --build
-```
-
-## CI/CD (GitHub Actions)
-
-### CI (tests)
-
-Workflow: `.github/workflows/ci.yml`
-
-Trigger:
-- push в `develop` и `master`
-- любой PR в `develop` или `master`
-- ручной запуск (`workflow_dispatch`)
-
-Что делает:
-- поднимает JDK 17
-- запускает `./gradlew clean test`
-- публикует артефакты отчётов (`build/reports/tests/test`, `build/test-results/test`)
-
-### CD (deploy)
-
-Workflow: `.github/workflows/deploy.yml` (запускается только после успешного CI)
-
-Trigger:
-- успешный `CI` на ветке `master` (event `push`)
-- это покрывает: прямой push в `master` и merge PR `develop -> master`
-
-Secrets:
-- `SSH_HOST`
-- `SSH_USER`
-- `SSH_PRIVATE_KEY`
-
-Команды на сервере:
-
-```bash
-cd /home/azirumga/store-abstract
-git pull origin master
-docker compose up -d --build
-docker image prune -f
-```
-
-## Переменные окружения
-
-- `PORT=18080`
-- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
-- `JWT_SECRET`
-- `REDIS_HOST`, `REDIS_PORT`
-- `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`
-- `FRONTEND_API_URL`
-- `ADMIN_EMAIL`, `ADMIN_PASSWORD`
-
-## API routes
+## API Routes
 
 - `POST /auth/register`
 - `POST /auth/login`
@@ -147,42 +102,57 @@ docker image prune -f
 - `GET /health`
 - `GET /swagger`
 
-## Worker
-
-`worker` запускается отдельным контейнером (`APP_MODE=worker`):
-
-- читает pending события из `outbox_events`
-- публикует их в RabbitMQ (`order_events`) с retry/backoff
-- consumes `order_events`
-- пишет событие в логи и имитирует email-уведомление (log only)
-
-## Тесты
-
-- Unit: `PasswordServiceTest`
-- Integration: `UserRepositoryIntegrationTest` (Testcontainers)
-- E2E: `ApiE2ETest`
-
-Запуск:
+## Tests
 
 ```bash
 ./gradlew test
 ```
 
-## Поведение удаления товара
+В проекте есть:
+- unit tests
+- integration tests (Testcontainers)
+- e2e tests
 
-- `DELETE /products/{id}` делает soft-delete: товар скрывается из каталога и недоступен для новых заказов.
-- Исторические заказы сохраняют ссылку на товар, поэтому отчеты и история остаются корректными.
-- События заказов пишутся в DB outbox в той же транзакции, а worker публикует их в RabbitMQ с ретраями.
+Тесты автоматически прогоняются в GitHub Actions workflow при каждом `push` и `pull_request` в `master`/`develop`.
 
+## CI/CD
 
+Один workflow: `.github/workflows/ci.yml`
 
+Jobs:
+- `test`: запускает `./gradlew clean test` (unit + integration + e2e)
+- `deploy`: запускается только после успешного `test` и только для `push` в `master`
 
+Deploy выполняется по SSH и запускает:
 
+```bash
+git pull origin master
+docker compose up -d --build
+docker image prune -f
+```
 
+### Required GitHub Secrets
 
+- `SSH_HOST`
+- `SSH_USER`
+- `SSH_PRIVATE_KEY`
 
+## Server Deployment
 
+1. Клонировать репозиторий на сервер в целевую директорию.
+2. Создать `.env` (из `.env.example`).
+3. Убедиться, что путь в deploy job (`cd ...`) совпадает с реальным путем проекта на сервере.
+4. Запустить вручную первый раз:
 
+```bash
+docker compose up -d --build
+```
 
+Дальше деплой выполняется автоматически по `push` в `master`.
 
+## Business Notes
 
+- Удаление товара (`DELETE /products/{id}`) реализовано как soft-delete.
+- Товар исключается из каталога и новых заказов.
+- Исторические заказы остаются корректными (с сохранением имени товара в order items).
+- События заказов пишутся в outbox в рамках транзакции и публикуются worker-ом в RabbitMQ.
